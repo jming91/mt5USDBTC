@@ -18,6 +18,7 @@ input int ADXPeriod = 12; // ADX period
 input double ADXThreshold = 20; // ADX threshold for strong trend
 input double MinSL = 20; // Minimum stop-loss in points
 input double MinTP = 40; // Minimum take-profit in points
+input double MinFreeMarginPercent = 20.0; // Minimum free margin percentage to allow trading
 
 //+------------------------------------------------------------------+
 //| Include CTrade class for trade operations                        |
@@ -31,6 +32,20 @@ CTrade trade;
 void OnTick()
 {
    double lotSize = CalculateLotSize(); // Dynamic position sizing
+
+   // Monitor Margin Levels
+   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   double marginLevel = (freeMargin / accountBalance) * 100;
+
+   Print("Balance: ", accountBalance, " | Free Margin: ", freeMargin, " | Margin Level: ", marginLevel, "%");
+
+   // Stop trading if free margin is too low
+   if (marginLevel < MinFreeMarginPercent)
+   {
+      Print("Low Margin Warning: Free margin below ", MinFreeMarginPercent, "%. Stopping new trades.");
+      return;
+   }
 
    // Calculate cumulative profit
    double cumulativeProfit = 0;
