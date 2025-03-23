@@ -24,10 +24,63 @@ input double MinTP = 40; // Minimum take-profit in points
 CTrade trade;
 
 //+------------------------------------------------------------------+
+//| Calculate lot size based on risk                                 |
+//+------------------------------------------------------------------+
+double CalculateLotSize()
+{
+   double riskAmount = StartCapital * (RiskPercentage / 100);
+   double lotSize = riskAmount / 10;
+   lotSize = lotSize * (100 / iATR(_Symbol, PERIOD_M5, 14));
+   lotSize = MathMax(lotSize, MinLotSize);
+   lotSize = MathMin(lotSize, 0.1);
+   Print("Calculated Lot Size: ", lotSize);
+   return lotSize;
+}
+
+//+------------------------------------------------------------------+
+//| Monitor open trades                                              |
+//+------------------------------------------------------------------+
+void MonitorTrades()
+{
+   double atr[], currentATR;
+   int atr_handle = iATR(_Symbol, PERIOD_M5, 14);
+   CopyBuffer(atr_handle, 0, 0, 1, atr);
+   currentATR = atr[0];
+
+   long currentTime = TimeCurrent();
+
+   for (int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if (PositionSelectByTicket(ticket))
+      {
+         long openTime = PositionGetInteger(POSITION_TIME);
+         double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+         double sl = PositionGetDouble(POSITION_SL);
+         double tp = PositionGetDouble(POSITION_TP);
+         double tradeATR = TakeProfitMultiplier * currentATR;
+
+         Print("Monitoring Trade: Ticket ", ticket, " | Open Time: ", openTime, " | SL: ", sl, " | TP: ", tp);
+
+         // Close trade if duration exceeds MaxTradeDuration
+         if ((currentTime - openTime) > MaxTradeDuration)
+         {
+            Print("Closing trade due to max duration: ", ticket);
+            trade.PositionClose(ticket);
+            continue;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   Print("OnTick() is executing...");
+   MonitorTrades();
+
    double lotSize = CalculateLotSize(); // Dynamic position sizing
 
    // Calculate cumulative profit
@@ -40,6 +93,7 @@ void OnTick()
          cumulativeProfit += PositionGetDouble(POSITION_PROFIT);
       }
    }
+   Print("Cumulative Profit: ", cumulativeProfit);
 
    // Stop trading if cumulative profit reaches the target
    if (cumulativeProfit >= TotalProfitTarget)
@@ -75,25 +129,18 @@ void OnTick()
       if ((currentFastMA - currentSlowMA) > 5 && currentRSI < RSIOverbought && currentADX > ADXThreshold)
       {
          double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+         Print("Opening Buy Order at ", ask);
          trade.Buy(lotSize, _Symbol, ask, 0, ask + (TakeProfitMultiplier * currentATR));
       }
       else if ((currentFastMA - currentSlowMA) < -5 && currentRSI > RSIOversold && currentADX > ADXThreshold)
       {
          double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+         Print("Opening Sell Order at ", bid);
          trade.Sell(lotSize, _Symbol, bid, 0, bid - (TakeProfitMultiplier * currentATR));
       }
+      else
+      {
+         Print("No trade conditions met.");
+      }
    }
-}
-
-//+------------------------------------------------------------------+
-//| Calculate lot size based on risk                                 |
-//+------------------------------------------------------------------+
-double CalculateLotSize()
-{
-   double riskAmount = StartCapital * (RiskPercentage / 100);
-   double lotSize = riskAmount / 10;
-   lotSize = lotSize * (100 / iATR(_Symbol, PERIOD_M5, 14));
-   lotSize = MathMax(lotSize, MinLotSize);
-   lotSize = MathMin(lotSize, 0.1);
-   return lotSize;
 }
