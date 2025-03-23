@@ -118,6 +118,31 @@ void OnTick()
          trade.Sell(lotSize, _Symbol, bid, 0, bid - (TakeProfitMultiplier * currentATR));
       }
    }
+
+   // Smart Time-Based Exit: Close trades after MaxTradeDuration if in loss or breakeven
+   for (int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if (PositionSelectByTicket(ticket))
+      {
+         // Fixed the casting issue from long to datetime
+         datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);  // Cast long to datetime
+         double positionProfit = PositionGetDouble(POSITION_PROFIT);
+         
+         if ((TimeCurrent() - openTime >= MaxTradeDuration) && (positionProfit <= 0))
+         {
+            // Close trade if it's in loss or breakeven after MaxTradeDuration
+            Print("Max trade duration reached. Closing trade.");
+            trade.PositionClose(ticket);
+         }
+         else if (currentADX < ADXThreshold)
+         {
+            // Close trade early if ADX shows a weak trend
+            Print("Weak trend detected (ADX < ", ADXThreshold, "). Closing trade.");
+            trade.PositionClose(ticket);
+         }
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
