@@ -7,6 +7,8 @@ input double TakeProfitMultiplier = 2.0; // Take profit multiplier (e.g., 2x ATR
 input double TrailingDistanceMultiplier = 1.0; // Trailing distance multiplier (e.g., 1x ATR)
 input double TotalProfitTarget = 20.0; // Total profit target in USD
 input double ATRThreshold = 100.0; // ATR threshold for crash detection
+input double ExtremeATRThreshold = 150.0; // ATR extreme threshold for forced exit
+input double MaxPriceDropPercentage = 2.0; // Maximum allowed BTC/USD drop in 5 min before forced exit
 input int MaxTradeDuration = 1800; // Maximum trade duration in seconds (e.g., 30 minutes)
 input double MinLotSize = 0.01; // Minimum lot size
 input int RSIPeriod = 12; // RSI period
@@ -24,63 +26,10 @@ input double MinTP = 40; // Minimum take-profit in points
 CTrade trade;
 
 //+------------------------------------------------------------------+
-//| Calculate lot size based on risk                                 |
-//+------------------------------------------------------------------+
-double CalculateLotSize()
-{
-   double riskAmount = StartCapital * (RiskPercentage / 100);
-   double lotSize = riskAmount / 10;
-   lotSize = lotSize * (100 / iATR(_Symbol, PERIOD_M5, 14));
-   lotSize = MathMax(lotSize, MinLotSize);
-   lotSize = MathMin(lotSize, 0.1);
-   Print("Calculated Lot Size: ", lotSize);
-   return lotSize;
-}
-
-//+------------------------------------------------------------------+
-//| Monitor open trades                                              |
-//+------------------------------------------------------------------+
-void MonitorTrades()
-{
-   double atr[], currentATR;
-   int atr_handle = iATR(_Symbol, PERIOD_M5, 14);
-   CopyBuffer(atr_handle, 0, 0, 1, atr);
-   currentATR = atr[0];
-
-   long currentTime = TimeCurrent();
-
-   for (int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if (PositionSelectByTicket(ticket))
-      {
-         long openTime = PositionGetInteger(POSITION_TIME);
-         double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-         double sl = PositionGetDouble(POSITION_SL);
-         double tp = PositionGetDouble(POSITION_TP);
-         double tradeATR = TakeProfitMultiplier * currentATR;
-
-         Print("Monitoring Trade: Ticket ", ticket, " | Open Time: ", openTime, " | SL: ", sl, " | TP: ", tp);
-
-         // Close trade if duration exceeds MaxTradeDuration
-         if ((currentTime - openTime) > MaxTradeDuration)
-         {
-            Print("Closing trade due to max duration: ", ticket);
-            trade.PositionClose(ticket);
-            continue;
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   Print("OnTick() is executing...");
-   MonitorTrades();
-
    double lotSize = CalculateLotSize(); // Dynamic position sizing
 
    // Calculate cumulative profit
@@ -93,7 +42,6 @@ void OnTick()
          cumulativeProfit += PositionGetDouble(POSITION_PROFIT);
       }
    }
-   Print("Cumulative Profit: ", cumulativeProfit);
 
    // Stop trading if cumulative profit reaches the target
    if (cumulativeProfit >= TotalProfitTarget)
@@ -121,26 +69,65 @@ void OnTick()
    double currentATR = atr[0];
    double currentRSI = rsi[0];
    double currentADX = adx[0];
+   double lastClosePrice = iClose(_Symbol, PERIOD_M5, 1);
+   double previousClosePrice = iClose(_Symbol, PERIOD_M5, 2);
+   double priceDropPercentage = ((previousClosePrice - lastClosePrice) / previousClosePrice) * 100;
 
    Print("Fast MA: ", currentFastMA, " | Slow MA: ", currentSlowMA, " | ATR: ", currentATR, " | RSI: ", currentRSI, " | ADX: ", currentADX);
+
+   // Crash Protection: Stop opening new trades if ATR is too high
+   if (currentATR > ATRThreshold)
+   {
+      Print("High Volatility Detected (ATR > ", ATRThreshold, "). Pausing new trades.");
+      return;
+   }
+
+   // Emergency Exit: Close all trades if ATR exceeds extreme threshold or price drops significantly
+   if (currentATR > ExtremeATRThreshold || priceDropPercentage > MaxPriceDropPercentage)
+   {
+      Print("Extreme Crash Detected! Closing all trades.");
+      CloseAllTrades();
+   }
 
    if (PositionsTotal() == 0)
    {
       if ((currentFastMA - currentSlowMA) > 5 && currentRSI < RSIOverbought && currentADX > ADXThreshold)
       {
          double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-         Print("Opening Buy Order at ", ask);
          trade.Buy(lotSize, _Symbol, ask, 0, ask + (TakeProfitMultiplier * currentATR));
       }
       else if ((currentFastMA - currentSlowMA) < -5 && currentRSI > RSIOversold && currentADX > ADXThreshold)
       {
          double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-         Print("Opening Sell Order at ", bid);
          trade.Sell(lotSize, _Symbol, bid, 0, bid - (TakeProfitMultiplier * currentATR));
       }
-      else
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close all open trades                                           |
+//+------------------------------------------------------------------+
+void CloseAllTrades()
+{
+   for (int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if (PositionSelectByTicket(ticket))
       {
-         Print("No trade conditions met.");
+         trade.PositionClose(ticket);
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate lot size based on risk                                 |
+//+------------------------------------------------------------------+
+double CalculateLotSize()
+{
+   double riskAmount = StartCapital * (RiskPercentage / 100);
+   double lotSize = riskAmount / 10;
+   lotSize = lotSize * (100 / iATR(_Symbol, PERIOD_M5, 14));
+   lotSize = MathMax(lotSize, MinLotSize);
+   lotSize = MathMin(lotSize, 0.1);
+   return lotSize;
 }
