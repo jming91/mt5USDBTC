@@ -23,7 +23,7 @@ input double MinFreeMarginPercent = 20.0; // Minimum free margin percentage to a
 //+------------------------------------------------------------------+
 //| Include CTrade class for trade operations                        |
 //+------------------------------------------------------------------+
-#include <Trade/Trade.mqh>
+#include <Trade\Trade.mqh>
 CTrade trade;
 
 //+------------------------------------------------------------------+
@@ -104,6 +104,7 @@ void OnTick()
       CloseAllTrades();
    }
 
+   // Check if there are open positions
    if (PositionsTotal() == 0)
    {
       if ((currentFastMA - currentSlowMA) > 5 && currentRSI < RSIOverbought && currentADX > ADXThreshold)
