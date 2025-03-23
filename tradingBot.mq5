@@ -19,6 +19,7 @@ input double ADXThreshold = 20; // ADX threshold for strong trend
 input double MinSL = 20; // Minimum stop-loss in points
 input double MinTP = 40; // Minimum take-profit in points
 input double MinFreeMarginPercent = 20.0; // Minimum free margin percentage to allow trading
+input double MinimumCapitalProtection = 10.0; // Minimum capital you want to protect
 
 //+------------------------------------------------------------------+
 //| Include CTrade class for trade operations                        |
@@ -31,10 +32,17 @@ CTrade trade;
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   // Check if account balance is below minimum capital protection
+   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   if (accountBalance < MinimumCapitalProtection)
+   {
+      Print("Balance below minimum protection level. Stopping trades.");
+      return;  // Exit the function and stop opening new trades
+   }
+
    double lotSize = CalculateLotSize(); // Dynamic position sizing
 
    // Monitor Margin Levels
-   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
    double marginLevel = (freeMargin / accountBalance) * 100;
 
