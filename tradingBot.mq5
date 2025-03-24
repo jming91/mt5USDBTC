@@ -98,10 +98,18 @@ void OnTick()
 
    Print("Fast MA: ", currentFastMA, " | Slow MA: ", currentSlowMA, " | ATR: ", currentATR, " | RSI: ", currentRSI, " | ADX: ", currentADX);
 
-   // Crash Protection: Stop opening new trades if ATR is too high
+   // Adjust lot size based on ATR
    if (currentATR > ATRThreshold)
    {
-      Print("High Volatility Detected (ATR > ", ATRThreshold, "). Pausing new trades.");
+      Print("High Volatility Detected (ATR > ", ATRThreshold, "). Reducing lot size.");
+      lotSize *= 0.5;  // Reduce lot size by 50% in high volatility conditions
+      lotSize = MathMax(lotSize, MinLotSize);  // Ensure it doesn't go below MinLotSize
+   }
+
+   // Prevent trading if ATR is extremely high
+   if (currentATR > ExtremeATRThreshold)
+   {
+      Print("Extreme Volatility Detected (ATR > ", ExtremeATRThreshold, "). No new trades allowed.");
       return;
    }
 
