@@ -101,7 +101,6 @@ void OnTick()
    // Adjust lot size based on ATR
    if (currentATR > ATRThreshold)
    {
-      Print("High Volatility Detected (ATR > ", ATRThreshold, "). Reducing lot size.");
       lotSize *= 0.5;  // Reduce lot size by 50% in high volatility conditions
       lotSize = MathMax(lotSize, MinLotSize);  // Ensure it doesn't go below MinLotSize
    }
